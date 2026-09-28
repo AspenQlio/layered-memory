@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import event
 
 from layered_memory.config import Settings
 from layered_memory.eval.dataset import load_cases, load_corpus, seed, validate_cases
@@ -21,6 +22,7 @@ from layered_memory.eval.metrics import (
 )
 from layered_memory.eval.run_eval import build_parser, run_evaluation
 from layered_memory.memory.service import MemoryService
+from layered_memory.store.db import build_engine
 
 
 def test_hit_and_recall_at_k() -> None:
@@ -178,6 +180,38 @@ def test_run_evaluation_measures_the_demo_corpus(tmp_path: Path, corpus: dict[st
     assert len(report.results) == 3
     assert 0.0 <= report.aggregate()["hit@3"] <= 1.0
     assert report.aggregate()["hit@3"] >= 0.5
+
+
+def test_run_evaluation_disposes_its_temporary_engine(
+    tmp_path: Path,
+    corpus: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from layered_memory.eval import run_eval
+
+    corpus_path, dataset_path = _write(
+        tmp_path,
+        corpus,
+        [{"id": "q1", "query": "certificado vencido", "expected": ["oncall"]}],
+    )
+    engine = build_engine("sqlite:///:memory:")
+    closed_connections = 0
+
+    @event.listens_for(engine, "close")
+    def count_closed_connection(*_args: object) -> None:
+        nonlocal closed_connections
+        closed_connections += 1
+
+    monkeypatch.setattr(run_eval, "build_engine", lambda _url: engine)
+
+    run_evaluation(
+        corpus_path=corpus_path,
+        dataset_path=dataset_path,
+        settings=Settings(database_url="sqlite:///:memory:", embedding_dim=128),
+        ks=(1,),
+    )
+
+    assert closed_connections == 1, "run_evaluation dejo abierta su conexion SQLite"
 
 
 def test_eval_cli_reports_bad_ks(capsys: pytest.CaptureFixture[str]) -> None:

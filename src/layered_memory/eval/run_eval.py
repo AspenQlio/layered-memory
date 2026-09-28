@@ -43,52 +43,55 @@ def run_evaluation(
     validate_cases(corpus, cases)
 
     engine = build_engine(database_url)
-    init_db(engine)
-    factory = create_session_factory(engine)
-    embedder = build_embedder(active)
-    # La evalucion indexa las tres capas: el grupo 'promocion' solo tiene
-    # sentido si los artifacts son alcanzables por la busqueda.
-    service = MemoryService(embedder, embed_artifacts=True)
-    index = VectorIndex(embedder)
-    depth = max(ks)
+    try:
+        init_db(engine)
+        factory = create_session_factory(engine)
+        embedder = build_embedder(active)
+        # La evalucion indexa las tres capas: el grupo 'promocion' solo tiene
+        # sentido si los artifacts son alcanzables por la busqueda.
+        service = MemoryService(embedder, embed_artifacts=True)
+        index = VectorIndex(embedder)
+        depth = max(ks)
 
-    with session_scope(factory) as session:
-        key_to_id = seed(service, session, corpus)
+        with session_scope(factory) as session:
+            key_to_id = seed(service, session, corpus)
 
-        results: list[CaseResult] = []
-        misses: list[str] = []
-        for case in cases:
-            hits = index.search(
-                session,
-                case.query,
-                namespace=corpus.namespace,
-                layers=list(Layer),
-                k=depth,
-            )
-            ranked = tuple(h.id for h in hits)
-            expected_ids = tuple(key_to_id[key] for key in case.expected)
-            results.append(
-                CaseResult(
-                    case_id=case.id,
-                    query=case.query,
-                    expected=expected_ids,
-                    ranked=ranked,
-                    scores=tuple(h.score for h in hits),
-                    group=case.group,
+            results: list[CaseResult] = []
+            misses: list[str] = []
+            for case in cases:
+                hits = index.search(
+                    session,
+                    case.query,
+                    namespace=corpus.namespace,
+                    layers=list(Layer),
+                    k=depth,
                 )
-            )
-            if not hit_at_k(ranked, expected_ids, depth):
-                misses.append(f"{case.id}: {case.query}")
+                ranked = tuple(h.id for h in hits)
+                expected_ids = tuple(key_to_id[key] for key in case.expected)
+                results.append(
+                    CaseResult(
+                        case_id=case.id,
+                        query=case.query,
+                        expected=expected_ids,
+                        ranked=ranked,
+                        scores=tuple(h.score for h in hits),
+                        group=case.group,
+                    )
+                )
+                if not hit_at_k(ranked, expected_ids, depth):
+                    misses.append(f"{case.id}: {case.query}")
 
-    return EvalReport(
-        backend=active.embedding_backend,
-        model=embedder.model,
-        dim=embedder.dim,
-        ks=tuple(sorted(ks)),
-        results=tuple(results),
-        corpus_size=corpus.size,
-        misses=tuple(misses),
-    )
+        return EvalReport(
+            backend=active.embedding_backend,
+            model=embedder.model,
+            dim=embedder.dim,
+            ks=tuple(sorted(ks)),
+            results=tuple(results),
+            corpus_size=corpus.size,
+            misses=tuple(misses),
+        )
+    finally:
+        engine.dispose()
 
 
 def build_parser() -> argparse.ArgumentParser:
