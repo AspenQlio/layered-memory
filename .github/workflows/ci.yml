@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Instalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Tests
+        run: pytest --cov=layered_memory --cov-report=term-missing
+
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: Evaluacion de retrieval
+        run: |
+          layered-memory-eval \
+            --corpus docs/demo-corpus.json \
+            --dataset docs/eval-dataset.json \
+            --json eval-actual.json
+      - name: Comparar contra el reporte versionado
+        run: |
+          python - <<'PY'
+          import json, sys
+          actual = json.load(open("eval-actual.json"))
+          base = json.load(open("docs/eval-results.json"))
+          drift = {
+              k: (base["aggregate"][k], actual["aggregate"][k])
+              for k in actual["aggregate"]
+              if abs(base["aggregate"][k] - actual["aggregate"][k]) > 1e-9
+          }
+          if drift:
+              print("La evaluacion cambio respecto a docs/eval-results.json:")
+              for key, (was, now) in sorted(drift.items()):
+                  print(f"  {key}: {was} -> {now}")
+              sys.exit(1)
+          print("La evaluacion coincide con docs/eval-results.json")
+          PY
