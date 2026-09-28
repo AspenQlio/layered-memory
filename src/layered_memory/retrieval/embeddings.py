@@ -21,7 +21,7 @@ import unicodedata
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-import httpx
+import httpx2
 import numpy as np
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -36,6 +36,10 @@ class Embedder(Protocol):
 
     def embed(self, texts: Sequence[str]) -> np.ndarray:
         """Devuelve una matriz ``(len(texts), dim)`` de vectores normalizados."""
+        ...
+
+    def close(self) -> None:
+        """Libera los recursos que mantiene el embedder."""
         ...
 
 
@@ -89,6 +93,9 @@ class HashingEmbedder:
             return np.zeros((0, self.dim), dtype=np.float32)
         return np.vstack([self._vector_for(t) for t in texts])
 
+    def close(self) -> None:
+        pass
+
 
 class OpenAICompatEmbedder:
     """Cliente del endpoint ``POST {base_url}/embeddings``."""
@@ -107,7 +114,7 @@ class OpenAICompatEmbedder:
         self.dim = dim
         self.base_url = base_url.rstrip("/")
         self.batch_size = batch_size
-        self._client = httpx.Client(
+        self._client = httpx2.Client(
             base_url=self.base_url,
             timeout=timeout,
             headers={"Authorization": f"Bearer {api_key}"},

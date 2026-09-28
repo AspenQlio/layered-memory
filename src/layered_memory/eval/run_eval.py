@@ -21,7 +21,7 @@ from layered_memory.domain import Layer
 from layered_memory.eval.dataset import load_cases, load_corpus, seed, validate_cases, write_report
 from layered_memory.eval.metrics import CaseResult, EvalReport, hit_at_k
 from layered_memory.memory.service import MemoryService
-from layered_memory.retrieval.embeddings import build_embedder
+from layered_memory.retrieval.embeddings import Embedder, build_embedder
 from layered_memory.retrieval.index import VectorIndex
 from layered_memory.store.db import build_engine, create_session_factory, init_db, session_scope
 
@@ -43,6 +43,7 @@ def run_evaluation(
     validate_cases(corpus, cases)
 
     engine = build_engine(database_url)
+    embedder: Embedder | None = None
     try:
         init_db(engine)
         factory = create_session_factory(engine)
@@ -91,6 +92,8 @@ def run_evaluation(
             misses=tuple(misses),
         )
     finally:
+        if embedder is not None:
+            embedder.close()
         engine.dispose()
 
 

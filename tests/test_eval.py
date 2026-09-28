@@ -22,6 +22,7 @@ from layered_memory.eval.metrics import (
 )
 from layered_memory.eval.run_eval import build_parser, run_evaluation
 from layered_memory.memory.service import MemoryService
+from layered_memory.retrieval.embeddings import HashingEmbedder
 from layered_memory.store.db import build_engine
 
 
@@ -212,6 +213,37 @@ def test_run_evaluation_disposes_its_temporary_engine(
     )
 
     assert closed_connections == 1, "run_evaluation dejo abierta su conexion SQLite"
+
+
+def test_run_evaluation_closes_its_embedder(
+    tmp_path: Path,
+    corpus: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from layered_memory.eval import run_eval
+
+    class TrackingEmbedder(HashingEmbedder):
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    corpus_path, dataset_path = _write(
+        tmp_path,
+        corpus,
+        [{"id": "q1", "query": "certificado vencido", "expected": ["oncall"]}],
+    )
+    embedder = TrackingEmbedder(dim=128)
+    monkeypatch.setattr(run_eval, "build_embedder", lambda _settings: embedder)
+
+    run_evaluation(
+        corpus_path=corpus_path,
+        dataset_path=dataset_path,
+        settings=Settings(database_url="sqlite:///:memory:", embedding_dim=128),
+        ks=(1,),
+    )
+
+    assert embedder.closed, "run_evaluation dejo abierto su cliente de embeddings"
 
 
 def test_eval_cli_reports_bad_ks(capsys: pytest.CaptureFixture[str]) -> None:
