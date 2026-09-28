@@ -45,6 +45,10 @@ The default backend is deterministic and network-free. Its hit@1 drop from
 understand paraphrases. The benchmark is a baseline, not a claim of semantic
 quality.
 
+The same 27 cases were run against BGE-M3 through Ollama. Overall hit@1 rose
+from 0.56 to 0.89, and paraphrase hit@1 rose from 0.22 to 0.78. The complete
+report records the model digest and the remaining miss.
+
 See [`docs/evaluation.md`](docs/evaluation.md) for the complete metrics,
 limitations, and semantic-embedder instructions.
 

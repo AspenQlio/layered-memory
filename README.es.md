@@ -58,6 +58,10 @@ sin red. `hit@1` cae de 1.00 a 0.22 entre consultas literales y parafraseadas: e
 la firma exacta de un índice que no entiende sinónimos, y por eso el número está
 a la vista en vez de escondido detrás de un promedio.
 
+Los mismos 27 casos se ejecutaron con BGE-M3 mediante Ollama. El `hit@1` global
+subió de 0.56 a 0.89, y el grupo `paraphrase` subió de 0.22 a 0.78. El reporte
+completo registra el digest del modelo y el único fallo restante.
+
 Análisis completo, cambio de embedder y limitaciones conocidas en
 [`docs/evaluation.md`](docs/evaluation.md).
 

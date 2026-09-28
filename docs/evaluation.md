@@ -48,6 +48,31 @@ Backend `hash` (`HashingEmbedder`, dim 512), sin red.
 | promotion | 6 | 0.17 | 0.33 | 0.33 | 0.67 | 0.26 | 0.15 |
 | **promedio** | 27 | **0.56** | **0.63** | **0.63** | **0.81** | **0.61** | **0.58** |
 
+La misma corrida se ejecuto con `bge-m3:latest` mediante Ollama 0.34.4. El
+modelo tiene 566.70M parametros, usa vectores de 1024 dimensiones y ocupa
+1.2 GB. El artefacto medido tiene este digest:
+
+```text
+7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab
+```
+
+| backend | hit@1 | hit@3 | hit@10 | mrr | ndcg@5 | fallos en top-10 |
+|---|---:|---:|---:|---:|---:|---:|
+| `hashing-v1` | 0.56 | 0.63 | 0.81 | 0.61 | 0.58 | 5 |
+| `bge-m3` | **0.89** | **0.96** | **0.96** | **0.93** | **0.94** | **1** |
+
+El cambio se ve con mas claridad en `hit@1` por grupo:
+
+| grupo | `hashing-v1` | `bge-m3` |
+|---|---:|---:|
+| lexical | 1.00 | 1.00 |
+| paraphrase | 0.22 | **0.78** |
+| promotion | 0.17 | **0.83** |
+
+Los reportes completos estan en `eval-results.json` y
+`eval-results-bge-m3.json`. La corrida semantica se repitio dos veces. Los
+agregados y las metricas por grupo fueron identicos.
+
 ## Que dicen estos numeros
 
 **El indice es perfecto cuando las palabras coinciden y se rompe cuando no.**
@@ -66,15 +91,16 @@ recupera la captura literal antes que el destilado que ya respondio eso. El
 destilado esta disponible; el ranking lo deja fuera. Destilar mejora la
 respuesta solo si el retrieval lo prioriza.
 
-**Cinco de 27 casos no aparecen en el top-10.** Son las fugas del indice, y son
-la lista de trabajo: o se agrega un sinonimo, o se cambia el embedder, o la
-consulta no tiene respuesta en el corpus. Los tres son decisiones distintas.
+**BGE-M3 reduce los fallos en top-10 de cinco a uno.** El caso restante es
+`q-pro-03`. La consulta pide la causa de una perdida de webhooks. El corpus
+marca el destilado como respuesta, pero la captura literal tambien es valida.
+La limitacion esta en la anotacion binaria, no necesariamente en el ranking.
 
 ## Cambiar el embedder
 
 El backend por defecto es determinista y local a proposito: los tests, la CI y
-este demo tienen que correr sin red y sin GPU. Para medir un embedder semantico
-se apunta a cualquier endpoint compatible con la especificacion de OpenAI:
+este demo tienen que correr sin red y sin GPU. La comparacion medida usa un
+endpoint compatible con la especificacion de OpenAI:
 
 ```bash
 # Ollama
@@ -84,12 +110,13 @@ ollama pull bge-m3
 layered-memory-eval \
   --corpus docs/demo-corpus.json --dataset docs/eval-dataset.json \
   --backend openai --embedding-model bge-m3 \
-  --embedding-base-url http://localhost:11434/v1
+  --embedding-base-url http://localhost:11434/v1 \
+  --json docs/eval-results-bge-m3.json \
+  --markdown docs/eval-table-bge-m3.md
 ```
 
-El resto de las metricas se recalcula igual. El numero que hay que mirar es la
-columna `paraphrase`: si no sube de 0.22, el embedder semantico no esta
-aportando sobre este corpus y el problema esta en otra parte.
+Esta corrida no forma parte de la CI porque descarga un modelo de 1.2 GB. La CI
+mantiene el baseline `hash`, que no necesita red ni un servicio externo.
 
 En produccion, cambiar de embedder exige `layered-memory reindex`: la dimension
 guardada deja de coincidir y `VectorIndex.search` lo rechaza a proposito en vez
@@ -120,5 +147,5 @@ ninguna decision.
 - **No hay evaluacion de la calidad de la respuesta.** Aqui se mide que se recupera
   el documento correcto, no que el agente lo use bien. Eso exigiria un juez con
   modelo y su propio conjunto de metricas.
-- **El backend por omision no es semantico.** Todo lo anterior es valido como
-  linea base, no como techo.
+- **El backend por omision no es semantico.** `bge-m3` mide un techo mejor para
+  este corpus, pero agrega un servicio y un modelo de 1.2 GB.
