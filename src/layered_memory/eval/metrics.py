@@ -11,6 +11,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import log2
 
+from layered_memory.eval.errors import EvaluationDataError
+from layered_memory.types import JsonObject
+
 
 def hit_at_k(ranked: Sequence[str], expected: Sequence[str], k: int) -> bool:
     """True si al menos un documento esperado aparece en el top-k."""
@@ -66,13 +69,15 @@ class EvalCase:
     group: str = "default"
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> EvalCase:
+    def from_dict(cls, data: JsonObject) -> EvalCase:
         missing = {"id", "query", "expected"} - set(data)
         if missing:
-            raise ValueError(f"el caso {data.get('id', '?')} no tiene {sorted(missing)}")
+            raise EvaluationDataError(f"el caso {data.get('id', '?')} no tiene {sorted(missing)}")
         expected = data["expected"]
         if not isinstance(expected, list) or not expected:
-            raise ValueError(f"el caso {data['id']} necesita 'expected' como lista no vacia")
+            raise EvaluationDataError(
+                f"el caso {data['id']} necesita 'expected' como lista no vacia"
+            )
         return cls(
             id=str(data["id"]),
             query=str(data["query"]),
@@ -110,7 +115,7 @@ class CaseResult:
                 return position
         return None
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> JsonObject:
         return {
             "case_id": self.case_id,
             "group": self.group,
@@ -159,7 +164,7 @@ class EvalReport:
             name: _mean([r.metrics(self.ks) for r in rows]) for name, rows in sorted(groups.items())
         }
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> JsonObject:
         return {
             "backend": self.backend,
             "model": self.model,

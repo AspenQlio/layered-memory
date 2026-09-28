@@ -12,21 +12,35 @@ Reglas que sostiene:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from layered_memory.domain import Layer, RawStatus
+from layered_memory.memory.errors import EmptyMemoryContentError, MemoryNotFoundError
+from layered_memory.memory.helpers import (
+    clean_tags as _clean_tags,
+)
+from layered_memory.memory.helpers import (
+    derive_title as _derive_title,
+)
+from layered_memory.memory.helpers import (
+    indexable_text as _indexable_text,
+)
+from layered_memory.memory.helpers import (
+    iter_layers,
+)
+from layered_memory.memory.helpers import (
+    log_event as _log,
+)
+from layered_memory.memory.helpers import (
+    store_vector as _store_vector,
+)
 from layered_memory.memory.record import MemoryRecord
 from layered_memory.retrieval.embeddings import Embedder
-from layered_memory.store.models import EMBEDDABLE_LAYERS, Event, Memory, new_id
-
-
-class MemoryNotFoundError(LookupError):
-    """Se pidio una memoria que no existe en el namespace dado."""
+from layered_memory.store.models import EMBEDDABLE_LAYERS, Memory, new_id
 
 
 class MemoryService:
@@ -120,7 +134,7 @@ class MemoryService:
         """Registra contenido literal en la capa ``raw``."""
         cleaned = content.strip()
         if not cleaned:
-            raise ValueError("no se puede capturar contenido vacio")
+            raise EmptyMemoryContentError("capturar")
 
         row = Memory(
             id=new_id(),
@@ -156,7 +170,7 @@ class MemoryService:
         parent = self._row(session, raw_id)
         cleaned = content.strip()
         if not cleaned:
-            raise ValueError("no se puede destilar contenido vacio")
+            raise EmptyMemoryContentError("destilar")
 
         row = Memory(
             id=new_id(),
@@ -200,7 +214,7 @@ class MemoryService:
         parent = self._row(session, insight_id)
         cleaned = content.strip()
         if not cleaned:
-            raise ValueError("no se puede producir contenido vacio")
+            raise EmptyMemoryContentError("producir")
 
         row = Memory(
             id=new_id(),
@@ -265,57 +279,4 @@ class MemoryService:
         _store_vector(row, vector, self.embedder.model)
 
 
-def _indexable_text(row: Memory) -> str:
-    """El texto que representa a la memoria en el espacio vectorial.
-
-    Poner el titulo primero pondera la señal del titulo porque el modelo lo
-    trata como el encabezado del documento.
-    """
-    return f"{row.title}\n\n{row.content}"
-
-
-def _store_vector(row: Memory, vector: np.ndarray, model: str) -> None:
-    normalized = vector.astype(np.float32)
-    norm = float(np.linalg.norm(normalized))
-    if norm > 0:
-        normalized = normalized / norm
-    row.embedding = normalized.tobytes()
-    row.embedding_dim = int(normalized.shape[0])
-    row.embedded_model = model
-
-
-def _derive_title(content: str, *, max_len: int = 80) -> str:
-    first_line = next((line for line in content.splitlines() if line.strip()), "captura")
-    title = first_line.strip()
-    return title if len(title) <= max_len else f"{title[: max_len - 1]}…"
-
-
-def _clean_tags(tags: Iterable[str]) -> list[str]:
-    """Minusculas, sin vacios, sin repetidos y en orden estable."""
-    seen: dict[str, None] = {}
-    for tag in tags:
-        normalized = tag.strip().lower()
-        if normalized:
-            seen[normalized] = None
-    return list(seen)
-
-
-def _log(
-    session: Session,
-    namespace: str,
-    kind: str,
-    subject_id: str | None,
-    payload: dict[str, Any],
-) -> None:
-    session.add(Event(namespace=namespace, kind=kind, subject_id=subject_id, payload=payload))
-
-
-def iter_layers(layers: Iterable[str] | None) -> tuple[Layer, ...]:
-    """Normaliza una lista de strings a ``Layer``, ignorando desconocidos."""
-    if not layers:
-        return (Layer.RAW, Layer.INSIGHT)
-    valid = tuple(Layer(value) for value in layers if value in tuple(Layer))
-    return valid or (Layer.RAW, Layer.INSIGHT)
-
-
-__all__ = ["MemoryNotFoundError", "MemoryService", "iter_layers"]
+__all__ = ["EmptyMemoryContentError", "MemoryNotFoundError", "MemoryService", "iter_layers"]

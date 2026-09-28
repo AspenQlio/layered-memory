@@ -199,7 +199,7 @@ def test_run_evaluation_disposes_its_temporary_engine(
     closed_connections = 0
 
     @event.listens_for(engine, "close")
-    def count_closed_connection(*_args: object) -> None:
+    def count_closed_connection(*_args: Any) -> None:
         nonlocal closed_connections
         closed_connections += 1
 
@@ -260,3 +260,11 @@ def test_eval_cli_parser_defaults() -> None:
 
     assert args.ks == "1,3,5,10"
     assert args.database_url == "sqlite:///:memory:"
+
+
+def test_eval_cli_accepts_hybrid_backend() -> None:
+    args = build_parser().parse_args(
+        ["--corpus", "c.json", "--dataset", "d.json", "--backend", "hybrid"]
+    )
+
+    assert args.backend == "hybrid"

@@ -22,7 +22,7 @@ from layered_memory.eval.dataset import load_cases, load_corpus, seed, validate_
 from layered_memory.eval.metrics import CaseResult, EvalReport, hit_at_k
 from layered_memory.memory.service import MemoryService
 from layered_memory.retrieval.embeddings import Embedder, build_embedder
-from layered_memory.retrieval.index import VectorIndex
+from layered_memory.retrieval.index import build_index
 from layered_memory.store.db import build_engine, create_session_factory, init_db, session_scope
 
 DEFAULT_KS: tuple[int, ...] = (1, 3, 5, 10)
@@ -51,7 +51,7 @@ def run_evaluation(
         # La evalucion indexa las tres capas: el grupo 'promocion' solo tiene
         # sentido si los artifacts son alcanzables por la busqueda.
         service = MemoryService(embedder, embed_artifacts=True)
-        index = VectorIndex(embedder)
+        index = build_index(active, embedder)
         depth = max(ks)
 
         with session_scope(factory) as session:
@@ -109,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--backend",
-        choices=("hash", "openai"),
+        choices=("hash", "openai", "hybrid"),
         default=None,
         help="Fuerza el backend de embeddings en vez de usar la configuracion.",
     )
@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _settings_from_args(args: argparse.Namespace) -> Settings:
     settings = get_settings()
-    changes: dict[str, object] = {}
+    changes: dict[str, str] = {}
     if args.backend:
         changes["embedding_backend"] = args.backend
     if args.embedding_model:

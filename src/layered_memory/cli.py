@@ -15,15 +15,27 @@ import sys
 import time
 from collections.abc import Sequence
 from contextlib import suppress
-from typing import Any
+from enum import StrEnum
+from types import FrameType
+from typing import Any, assert_never
 
 from layered_memory.agents.handoff import HandoffConflictError, HandoffNotFoundError, HandoffQueue
+from layered_memory.cli_parser import build_parser
 from layered_memory.config import get_settings
 from layered_memory.domain import HandoffStatus
 from layered_memory.memory.service import MemoryNotFoundError, MemoryService
 from layered_memory.retrieval.embeddings import build_embedder
-from layered_memory.retrieval.index import VectorIndex, build_context_block
+from layered_memory.retrieval.index import build_context_block, build_index
 from layered_memory.store.db import build_engine, create_session_factory, init_db, session_scope
+from layered_memory.types import JsonValue
+
+
+class HandoffCommand(StrEnum):
+    ENQUEUE = "enqueue"
+    NEXT = "next"
+    DEPTH = "depth"
+    LIST = "list"
+    RESOLVE = "resolve"
 
 
 class Runtime:
@@ -39,110 +51,15 @@ class Runtime:
         self.factory = create_session_factory(self.engine)
         embedder = build_embedder(settings)
         self.memory = MemoryService(embedder, embed_artifacts=not args.no_index_artifacts)
-        self.index = VectorIndex(embedder)
+        self.index = build_index(settings, embedder)
         self.handoffs = HandoffQueue()
 
     def session(self) -> Any:
         return session_scope(self.factory)
 
 
-def _emit(payload: object) -> None:
+def _emit(payload: JsonValue) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="layered-memory",
-        description="Memoria por capas para agentes de IA.",
-    )
-    parser.add_argument(
-        "--database-url", default=None, help="Sobrescribe LAYERED_MEMORY_DATABASE_URL."
-    )
-    parser.add_argument(
-        "--no-index-artifacts",
-        action="store_true",
-        help="No embebe la capa artifact (por omision si la indexa).",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    capture = sub.add_parser("capture", help="Guarda contenido literal en la capa raw.")
-    capture.add_argument("content")
-    capture.add_argument("--title", default=None)
-    capture.add_argument("--source", default=None)
-    capture.add_argument("--tag", action="append", default=[], dest="tags")
-    capture.add_argument("--namespace", default="default")
-    capture.add_argument("--no-embed", action="store_true")
-
-    distill = sub.add_parser("distill", help="Destila una captura en un insight.")
-    distill.add_argument("memory_id")
-    distill.add_argument("--title", required=True)
-    distill.add_argument("--content", required=True)
-    distill.add_argument("--tag", action="append", default=[], dest="tags")
-
-    produce = sub.add_parser("produce", help="Produce un artifact a partir de un insight.")
-    produce.add_argument("memory_id")
-    produce.add_argument("--title", required=True)
-    produce.add_argument("--content", required=True)
-    produce.add_argument("--tag", action="append", default=[], dest="tags")
-
-    show = sub.add_parser("show", help="Muestra una memoria con su ascendencia.")
-    show.add_argument("memory_id")
-
-    search = sub.add_parser("search", help="Busca por similitud.")
-    search.add_argument("query")
-    search.add_argument("--k", type=int, default=5)
-    search.add_argument(
-        "--layer",
-        action="append",
-        default=[],
-        dest="layers",
-        choices=("raw", "insight", "artifact"),
-    )
-    search.add_argument("--tag", action="append", default=[], dest="tags")
-    search.add_argument("--min-score", type=float, default=0.0)
-    search.add_argument("--context", type=int, default=0, help="Caracteres del bloque de contexto.")
-    search.add_argument("--namespace", default="default")
-
-    pending = sub.add_parser("pending", help="Capturas que faltan por destilar.")
-    pending.add_argument("--limit", type=int, default=20)
-    pending.add_argument("--namespace", default="default")
-
-    stats = sub.add_parser("stats", help="Resumen por capa.")
-    stats.add_argument("--namespace", default="default")
-
-    sub.add_parser("reindex", help="Reembebe lo indexable de un namespace.")
-
-    handoff = sub.add_parser("handoff", help="Gestiona la cola de escalado a humano.")
-    hsub = handoff.add_subparsers(dest="handoff_command", required=True)
-    enqueue = hsub.add_parser("enqueue")
-    enqueue.add_argument("reason")
-    enqueue.add_argument("--session-id", default=None)
-    enqueue.add_argument("--namespace", default="default")
-    hnext = hsub.add_parser("next", help="Reclama la peticion mas antigua.")
-    hnext.add_argument("--name", default="worker")
-    hnext.add_argument("--namespace", default="default")
-    hdepth = hsub.add_parser("depth", help="Cuantas peticiones siguen esperando.")
-    hdepth.add_argument("--namespace", default="default")
-    hlist = hsub.add_parser("list")
-    hlist.add_argument("--namespace", default="default")
-    hlist.add_argument("--status", default=None, choices=[str(s) for s in HandoffStatus])
-    resolve = hsub.add_parser("resolve")
-    resolve.add_argument("handoff_id")
-    resolve.add_argument("resolution")
-    resolve.add_argument("--by", default="human")
-
-    worker = sub.add_parser("worker", help="Vacia la cola de handoffs en bucle.")
-    worker.add_argument("--once", action="store_true", help="Atiende una peticion y sale.")
-    worker.add_argument("--interval", type=float, default=None)
-    worker.add_argument("--name", default="worker")
-    worker.add_argument("--namespace", default="default")
-
-    serve = sub.add_parser("serve", help="Levanta la API HTTP con uvicorn.")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
-    serve.add_argument("--reload", action="store_true")
-
-    return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -266,27 +183,33 @@ def _reindex(runtime: Runtime, args: argparse.Namespace) -> int:
 
 def _handoff(runtime: Runtime, args: argparse.Namespace) -> int:
     with runtime.session() as session:
-        if args.handoff_command == "enqueue":
-            record = runtime.handoffs.enqueue(
-                session, args.reason, namespace=args.namespace, session_id=args.session_id
-            )
-            _emit(record.as_dict())
-        elif args.handoff_command == "next":
-            record = runtime.handoffs.claim_next(
-                session, namespace=args.namespace, claimed_by=args.name
-            )
-            _emit(record.as_dict() if record else {"idle": True, "queued": 0})
-        elif args.handoff_command == "depth":
-            _emit({"queued": runtime.handoffs.depth(session, namespace=args.namespace)})
-        elif args.handoff_command == "list":
-            status_filter = HandoffStatus(args.status) if args.status else None
-            records = runtime.handoffs.list(session, namespace=args.namespace, status=status_filter)
-            _emit([r.as_dict() for r in records])
-        else:
-            record = runtime.handoffs.resolve(
-                session, args.handoff_id, args.resolution, resolved_by=args.by
-            )
-            _emit(record.as_dict())
+        command = HandoffCommand(args.handoff_command)
+        match command:
+            case HandoffCommand.ENQUEUE:
+                record = runtime.handoffs.enqueue(
+                    session, args.reason, namespace=args.namespace, session_id=args.session_id
+                )
+                _emit(record.as_dict())
+            case HandoffCommand.NEXT:
+                record = runtime.handoffs.claim_next(
+                    session, namespace=args.namespace, claimed_by=args.name
+                )
+                _emit(record.as_dict() if record else {"idle": True, "queued": 0})
+            case HandoffCommand.DEPTH:
+                _emit({"queued": runtime.handoffs.depth(session, namespace=args.namespace)})
+            case HandoffCommand.LIST:
+                status_filter = HandoffStatus(args.status) if args.status else None
+                records = runtime.handoffs.list(
+                    session, namespace=args.namespace, status=status_filter
+                )
+                _emit([record.as_dict() for record in records])
+            case HandoffCommand.RESOLVE:
+                record = runtime.handoffs.resolve(
+                    session, args.handoff_id, args.resolution, resolved_by=args.by
+                )
+                _emit(record.as_dict())
+            case unreachable:
+                assert_never(unreachable)
     return 0
 
 
@@ -294,7 +217,7 @@ def _worker(runtime: Runtime, args: argparse.Namespace) -> int:
     interval = args.interval if args.interval is not None else runtime.settings.worker_poll_seconds
     stop = {"now": False}
 
-    def _handle_signal(_sig: int, _frame: object) -> None:
+    def _handle_signal(_sig: int, _frame: FrameType | None) -> None:
         stop["now"] = True
 
     with suppress(KeyboardInterrupt):

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -53,7 +54,7 @@ def session_scope(factory: sessionmaker[Session]) -> Iterator[Session]:
     try:
         yield session
         session.commit()
-    except Exception:
+    except SQLAlchemyError:
         session.rollback()
         raise
     finally:

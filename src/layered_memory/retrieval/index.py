@@ -13,6 +13,7 @@ La API de este modulo no cambia; cambia el interior de ``search``.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING, Protocol, assert_never
 
 import numpy as np
 from sqlalchemy import select
@@ -22,9 +23,39 @@ from layered_memory.domain import Layer
 from layered_memory.memory.record import MemoryRecord
 from layered_memory.retrieval.embeddings import Embedder
 from layered_memory.store.models import Memory
+from layered_memory.types import JsonObject
+
+if TYPE_CHECKING:
+    from layered_memory.config import Settings
 
 _SEPARATOR = "\n\n"
 _ELLIPSIS = "..."
+
+
+class EmbeddingDimensionMismatchError(ValueError):
+    def __init__(self, stored: int, configured: int) -> None:
+        self.stored = stored
+        self.configured = configured
+        super().__init__(
+            f"dimension guardada {stored} distinta de la del embedder {configured}; "
+            "reindexa o cambia de embedder"
+        )
+
+
+class SearchIndex(Protocol):
+    embedder: Embedder
+
+    def search(
+        self,
+        session: Session,
+        query: str,
+        *,
+        namespace: str = "default",
+        layers: Sequence[Layer] | None = None,
+        tags: Sequence[str] = (),
+        k: int = 5,
+        min_score: float = 0.0,
+    ) -> list[SearchHit]: ...
 
 
 class SearchHit:
@@ -40,7 +71,7 @@ class SearchHit:
     def id(self) -> str:
         return self.record.id
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self) -> JsonObject:
         return {
             "id": self.record.id,
             "score": round(self.score, 6),
@@ -76,33 +107,16 @@ class VectorIndex:
         if k <= 0:
             return []
 
-        wanted = list(layers) if layers else [Layer.RAW, Layer.INSIGHT]
-        stmt = (
-            select(Memory)
-            .where(
-                Memory.namespace == namespace,
-                Memory.layer.in_([str(layer) for layer in wanted]),
-                Memory.embedding.is_not(None),
-            )
-            .order_by(Memory.created_at.desc())
-            .limit(_candidate_cap(wanted))
+        rows = _load_candidates(
+            session,
+            namespace=namespace,
+            layers=layers,
+            tags=tags,
         )
-        rows = list(session.execute(stmt).scalars())
-
-        required = {tag.lower() for tag in tags}
-        rows = [row for row in rows if required <= {t.lower() for t in (row.tags or [])}]
         if not rows:
             return []
 
-        matrix = np.vstack([np.frombuffer(row.embedding, dtype=np.float32) for row in rows])
-        if matrix.shape[1] != self.embedder.dim:
-            raise ValueError(
-                f"dimension guardada {matrix.shape[1]} distinta de la del embedder "
-                f"{self.embedder.dim}; reindexa o cambia de embedder"
-            )
-
-        query_vec = self.embedder.embed([query])[0]
-        scores = matrix @ query_vec
+        scores = _vector_scores(rows, query, self.embedder)
 
         ranked = sorted(
             zip(rows, scores.tolist(), strict=True),
@@ -115,6 +129,54 @@ class VectorIndex:
             if score >= min_score
         ]
         return hits[:k]
+
+
+def build_index(settings: Settings, embedder: Embedder) -> SearchIndex:
+    match settings.embedding_backend:
+        case "hash" | "openai":
+            return VectorIndex(embedder)
+        case "hybrid":
+            from layered_memory.retrieval.hybrid import HybridIndex
+
+            return HybridIndex(
+                embedder,
+                lexical_dim=settings.hybrid_lexical_dim,
+                rank_constant=settings.hybrid_rank_constant,
+                semantic_weight=settings.hybrid_semantic_weight,
+                semantic_head=settings.hybrid_semantic_head,
+            )
+        case unreachable:
+            assert_never(unreachable)
+
+
+def _load_candidates(
+    session: Session,
+    *,
+    namespace: str,
+    layers: Sequence[Layer] | None,
+    tags: Sequence[str],
+) -> list[Memory]:
+    wanted = list(layers) if layers else [Layer.RAW, Layer.INSIGHT]
+    stmt = (
+        select(Memory)
+        .where(
+            Memory.namespace == namespace,
+            Memory.layer.in_([str(layer) for layer in wanted]),
+            Memory.embedding.is_not(None),
+        )
+        .order_by(Memory.created_at.desc())
+        .limit(_candidate_cap(wanted))
+    )
+    rows = list(session.execute(stmt).scalars())
+    required = {tag.lower() for tag in tags}
+    return [row for row in rows if required <= {tag.lower() for tag in (row.tags or [])}]
+
+
+def _vector_scores(rows: Sequence[Memory], query: str, embedder: Embedder) -> np.ndarray:
+    matrix = np.vstack([np.frombuffer(row.embedding, dtype=np.float32) for row in rows])
+    if matrix.shape[1] != embedder.dim:
+        raise EmbeddingDimensionMismatchError(matrix.shape[1], embedder.dim)
+    return matrix @ embedder.embed([query])[0]
 
 
 def _candidate_cap(layers: Sequence[Layer]) -> int:

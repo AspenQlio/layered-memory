@@ -29,12 +29,13 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./layered_memory.db"
 
-    embedding_backend: Literal["hash", "openai"] = Field(
+    embedding_backend: Literal["hash", "openai", "hybrid"] = Field(
         default="hash",
         description=(
             "'hash' usa un embedder determinista local y sin dependencias; "
             "'openai' habla contra cualquier endpoint compatible con la "
-            "especificacion OpenAI (Ollama, llama.cpp, vLLM, LM Studio, OpenAI)."
+            "especificacion OpenAI (Ollama, llama.cpp, vLLM, LM Studio, OpenAI); "
+            "'hybrid' fusiona esa señal semantica con hashing lexical mediante RRF."
         ),
     )
     embedding_dim: int = Field(default=512, ge=32, le=8192)
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
     embedding_api_key: str = "not-needed"
     embedding_timeout: float = Field(default=30.0, gt=0)
     embedding_batch_size: int = Field(default=32, ge=1, le=512)
+    hybrid_lexical_dim: int = Field(default=512, ge=32, le=8192)
+    hybrid_rank_constant: int = Field(default=60, ge=1, le=1000)
+    hybrid_semantic_weight: float = Field(default=3.0, gt=0, le=100.0)
+    hybrid_semantic_head: int = Field(default=5, ge=0, le=100)
 
     retrieval_default_k: int = Field(default=5, ge=1, le=100)
     retrieval_min_score: float = Field(default=0.0, ge=-1.0, le=1.0)

@@ -59,19 +59,20 @@ modelo tiene 566.70M parametros, usa vectores de 1024 dimensiones y ocupa
 | backend | hit@1 | hit@3 | hit@10 | mrr | ndcg@5 | fallos en top-10 |
 |---|---:|---:|---:|---:|---:|---:|
 | `hashing-v1` | 0.56 | 0.63 | 0.81 | 0.61 | 0.58 | 5 |
-| `bge-m3` | **0.89** | **0.96** | **0.96** | **0.93** | **0.94** | **1** |
+| `bge-m3` | **0.89** | **0.96** | 0.96 | 0.93 | **0.94** | 1 |
+| `hybrid` | **0.89** | **0.96** | **1.00** | **0.93** | **0.94** | **0** |
 
 El cambio se ve con mas claridad en `hit@1` por grupo:
 
-| grupo | `hashing-v1` | `bge-m3` |
-|---|---:|---:|
-| lexical | 1.00 | 1.00 |
-| paraphrase | 0.22 | **0.78** |
-| promotion | 0.17 | **0.83** |
+| grupo | `hashing-v1` | `bge-m3` | `hybrid` |
+|---|---:|---:|---:|
+| lexical | 1.00 | 1.00 | 1.00 |
+| paraphrase | 0.22 | **0.78** | **0.78** |
+| promotion | 0.17 | **0.83** | **0.83** |
 
-Los reportes completos estan en `eval-results.json` y
-`eval-results-bge-m3.json`. La corrida semantica se repitio dos veces. Los
-agregados y las metricas por grupo fueron identicos.
+Los reportes completos estan en `eval-results.json`, `eval-results-bge-m3.json`
+y `eval-results-hybrid-bge-m3.json`. Las corridas semantica e hibrida se
+repitieron dos veces. Los agregados y las metricas por grupo fueron identicos.
 
 ## Que dicen estos numeros
 
@@ -92,9 +93,14 @@ destilado esta disponible; el ranking lo deja fuera. Destilar mejora la
 respuesta solo si el retrieval lo prioriza.
 
 **BGE-M3 reduce los fallos en top-10 de cinco a uno.** El caso restante es
-`q-pro-03`. La consulta pide la causa de una perdida de webhooks. El corpus
-marca el destilado como respuesta, pero la captura literal tambien es valida.
-La limitacion esta en la anotacion binaria, no necesariamente en el ranking.
+`q-pro-03`. La consulta pide la causa de una perdida de webhooks. La rama
+lexical reconoce la etiqueta `webhooks` y el backend hibrido mueve el destilado
+al puesto 9. El backend hibrido conserva el top-5 semantico, por lo que no
+reduce `hit@1`, `hit@3` ni `hit@5`.
+
+El backend `hybrid` usa RRF ponderado. La señal semantica pesa 3 y la lexical
+pesa 1. Los primeros cinco resultados conservan el orden semantico. RRF ordena
+el resto mediante similitud semantica y hashing de titulo, contenido y etiquetas.
 
 ## Cambiar el embedder
 
@@ -113,6 +119,13 @@ layered-memory-eval \
   --embedding-base-url http://localhost:11434/v1 \
   --json docs/eval-results-bge-m3.json \
   --markdown docs/eval-table-bge-m3.md
+
+layered-memory-eval \
+  --corpus docs/demo-corpus.json --dataset docs/eval-dataset.json \
+  --backend hybrid --embedding-model bge-m3 \
+  --embedding-base-url http://localhost:11434/v1 \
+  --json docs/eval-results-hybrid-bge-m3.json \
+  --markdown docs/eval-table-hybrid-bge-m3.md
 ```
 
 Esta corrida no forma parte de la CI porque descarga un modelo de 1.2 GB. La CI
@@ -140,12 +153,14 @@ ninguna decision.
 
 - **El corpus es pequeno** (26 documentos). Los hit@k estan optimistas respecto de
   un corpus real, donde la competencia por el ranking es mayor.
-- **La anotacion es de un solo documento.** Un caso como `q-pro-03` marca solo el
-  destilado, pero la captura literal tambien es aceptable; el ranking la pone
-  primero y el caso cuenta como fallo. Con relevancia graduada o multiples
-  aceptables, ese grupo mejoraria.
+- **La anotacion es de un solo documento.** Un caso puede tener varias respuestas
+  utiles, pero el set actual marca una sola. La relevancia graduada mediria mejor
+  esos casos.
 - **No hay evaluacion de la calidad de la respuesta.** Aqui se mide que se recupera
   el documento correcto, no que el agente lo use bien. Eso exigiria un juez con
   modelo y su propio conjunto de metricas.
 - **El backend por omision no es semantico.** `bge-m3` mide un techo mejor para
   este corpus, pero agrega un servicio y un modelo de 1.2 GB.
+- **La politica hibrida es conservadora.** No modifica el top-5 semantico. Este
+  limite evita regresiones tempranas, pero impide que la señal lexical corrija
+  un error dentro de esas cinco posiciones.

@@ -60,7 +60,9 @@ a la vista en vez de escondido detrás de un promedio.
 
 Los mismos 27 casos se ejecutaron con BGE-M3 mediante Ollama. El `hit@1` global
 subió de 0.56 a 0.89, y el grupo `paraphrase` subió de 0.22 a 0.78. El reporte
-completo registra el digest del modelo y el único fallo restante.
+completo registra el digest del modelo. El backend híbrido conserva los primeros
+cinco resultados semánticos y aplica RRF ponderado al resto. Mantiene `hit@1` en
+0.89 y sube `hit@10` de 0.96 a 1.00.
 
 Análisis completo, cambio de embedder y limitaciones conocidas en
 [`docs/evaluation.md`](docs/evaluation.md).
@@ -123,6 +125,15 @@ LAYERED_MEMORY_EMBEDDING_MODEL=bge-m3
 LAYERED_MEMORY_EMBEDDING_BASE_URL=http://localhost:11434/v1
 ```
 
+El backend híbrido conserva el top-5 semántico y reordena el resto con hashing
+léxico sobre títulos, contenido y etiquetas:
+
+```bash
+LAYERED_MEMORY_EMBEDDING_BACKEND=hybrid
+LAYERED_MEMORY_HYBRID_SEMANTIC_HEAD=5
+LAYERED_MEMORY_HYBRID_SEMANTIC_WEIGHT=3
+```
+
 Detalle de arquitectura en [`docs/architecture.md`](docs/architecture.md); API
 completa en `/docs` al levantar el servidor.
 
@@ -131,7 +142,7 @@ completa en `/docs` al levantar el servidor.
 ## Desarrollo
 
 ```bash
-pytest          # 63 tests
+pytest          # 74 tests
 ruff check .
 ```
 

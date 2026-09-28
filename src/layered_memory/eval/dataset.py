@@ -15,8 +15,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from layered_memory.domain import Layer
+from layered_memory.eval.errors import EvaluationDataError
 from layered_memory.eval.metrics import EvalCase
 from layered_memory.memory.service import MemoryService
+from layered_memory.types import JsonObject, JsonValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,19 +52,21 @@ def load_corpus(path: str | Path) -> Corpus:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     raw_documents = data.get("documents")
     if not isinstance(raw_documents, list) or not raw_documents:
-        raise ValueError(f"{path}: 'documents' debe ser una lista no vacia")
+        raise EvaluationDataError(f"{path}: 'documents' debe ser una lista no vacia")
 
     documents = tuple(_document(item) for item in raw_documents)
     known = {doc.key for doc in documents}
     duplicates = len(documents) - len(known)
     if duplicates:
-        raise ValueError(f"{path}: hay {duplicates} claves duplicadas")
+        raise EvaluationDataError(f"{path}: hay {duplicates} claves duplicadas")
 
     for doc in documents:
         if doc.parent and doc.parent not in known:
-            raise ValueError(f"{path}: '{doc.key}' referencia un padre inexistente: {doc.parent!r}")
+            raise EvaluationDataError(
+                f"{path}: '{doc.key}' referencia un padre inexistente: {doc.parent!r}"
+            )
         if doc.parent and doc.layer is Layer.RAW:
-            raise ValueError(f"{path}: una captura ('{doc.key}') no puede tener padre")
+            raise EvaluationDataError(f"{path}: una captura ('{doc.key}') no puede tener padre")
 
     return Corpus(namespace=str(data.get("namespace", "demo")), documents=documents)
 
@@ -71,7 +75,7 @@ def load_cases(path: str | Path) -> tuple[EvalCase, ...]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     raw_cases = data.get("cases")
     if not isinstance(raw_cases, list) or not raw_cases:
-        raise ValueError(f"{path}: 'cases' debe ser una lista no vacia")
+        raise EvaluationDataError(f"{path}: 'cases' debe ser una lista no vacia")
     return tuple(EvalCase.from_dict(item) for item in raw_cases)
 
 
@@ -81,7 +85,7 @@ def validate_cases(corpus: Corpus, cases: tuple[EvalCase, ...]) -> None:
     for case in cases:
         unknown = set(case.expected) - known
         if unknown:
-            raise ValueError(
+            raise EvaluationDataError(
                 f"el caso '{case.id}' espera claves ausentes del corpus: {sorted(unknown)}"
             )
 
@@ -102,7 +106,7 @@ def seed(service: MemoryService, session: Session, corpus: Corpus) -> dict[str, 
             )
         else:
             if doc.parent is None or doc.parent not in key_to_id:
-                raise ValueError(
+                raise EvaluationDataError(
                     f"el documento '{doc.key}' es {doc.layer} y necesita un parent ya sembrado"
                 )
             parent_id = key_to_id[doc.parent]
@@ -130,18 +134,22 @@ def seed(service: MemoryService, session: Session, corpus: Corpus) -> dict[str, 
     return key_to_id
 
 
-def _document(item: object) -> Document:
+def _document(item: JsonValue) -> Document:
     if not isinstance(item, dict):
-        raise ValueError(f"cada documento debe ser un objeto, recibi {type(item).__name__}")
+        raise EvaluationDataError(
+            f"cada documento debe ser un objeto, recibi {type(item).__name__}"
+        )
     missing = {"key", "layer", "title", "content"} - set(item)
     if missing:
-        raise ValueError(f"documento incompleto, faltan {sorted(missing)}: {item.get('key', '?')}")
+        raise EvaluationDataError(
+            f"documento incompleto, faltan {sorted(missing)}: {item.get('key', '?')}"
+        )
     raw_layer = str(item["layer"])
     try:
         layer = Layer(raw_layer)
     except ValueError as exc:
         valid = ", ".join(str(candidate) for candidate in Layer)
-        raise ValueError(
+        raise EvaluationDataError(
             f"el documento {item['key']!r} usa la capa invalida {raw_layer!r}; usa una de: {valid}"
         ) from exc
     return Document(
@@ -155,7 +163,7 @@ def _document(item: object) -> Document:
     )
 
 
-def write_report(report: dict[str, object], path: str | Path) -> Path:
+def write_report(report: JsonObject, path: str | Path) -> Path:
     """Guarda el reporte JSON con indentacion estable para diffs legibles."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

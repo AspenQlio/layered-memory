@@ -19,10 +19,14 @@ import math
 import re
 import unicodedata
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from types import TracebackType
+from typing import TYPE_CHECKING, Protocol, assert_never, runtime_checkable
 
 import httpx2
 import numpy as np
+
+if TYPE_CHECKING:
+    from layered_memory.config import Settings
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -37,6 +41,13 @@ class Embedder(Protocol):
     def embed(self, texts: Sequence[str]) -> np.ndarray:
         """Devuelve una matriz ``(len(texts), dim)`` de vectores normalizados."""
         ...
+
+
+class EmbeddingResponseError(ValueError):
+    def __init__(self, expected: int, received: int) -> None:
+        self.expected = expected
+        self.received = received
+        super().__init__(f"el endpoint devolvio {received} vectores para {expected} textos")
 
     def close(self) -> None:
         """Libera los recursos que mantiene el embedder."""
@@ -129,9 +140,7 @@ class OpenAICompatEmbedder:
         items = sorted(payload["data"], key=lambda d: d.get("index", 0))
         vectors = np.asarray([item["embedding"] for item in items], dtype=np.float32)
         if vectors.shape[0] != len(texts):
-            raise ValueError(
-                f"el endpoint devolvio {vectors.shape[0]} vectores para {len(texts)} textos"
-            )
+            raise EmbeddingResponseError(len(texts), vectors.shape[0])
         if vectors.shape[1] != self.dim:
             # El endpoint manda la verdad: adoptamos su dimension para no
             # escribir vectores que despues no podemos comparar.
@@ -153,7 +162,12 @@ class OpenAICompatEmbedder:
     def __enter__(self) -> OpenAICompatEmbedder:
         return self
 
-    def __exit__(self, *_exc: object) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
 
@@ -163,22 +177,23 @@ def _l2_normalize(matrix: np.ndarray) -> np.ndarray:
     return matrix / norms
 
 
-def build_embedder(settings: object) -> Embedder:
+def build_embedder(settings: Settings) -> Embedder:
     """Construye el embedder que pide la configuracion.
 
-    Acepta un :class:`~layered_memory.config.Settings` duck-typed, para no
-    crear una dependencia circular entre configuracion y retrieval.
+    En modo hibrido persiste la señal semantica; el indice calcula la rama
+    lexical durante cada busqueda sin duplicar vectores en la base.
     """
-    backend = getattr(settings, "embedding_backend", "hash")
-    if backend == "hash":
-        return HashingEmbedder(dim=int(getattr(settings, "embedding_dim", 512)))
-    if backend == "openai":
-        return OpenAICompatEmbedder(
-            model=str(getattr(settings, "embedding_model", "text-embedding-3-small")),
-            base_url=str(getattr(settings, "embedding_base_url", "")),
-            api_key=str(getattr(settings, "embedding_api_key", "not-needed")),
-            timeout=float(getattr(settings, "embedding_timeout", 30.0)),
-            batch_size=int(getattr(settings, "embedding_batch_size", 32)),
-            dim=int(getattr(settings, "embedding_dim", 512)),
-        )
-    raise ValueError(f"backend de embeddings desconocido: {backend!r}")
+    match settings.embedding_backend:
+        case "hash":
+            return HashingEmbedder(dim=settings.embedding_dim)
+        case "openai" | "hybrid":
+            return OpenAICompatEmbedder(
+                model=settings.embedding_model,
+                base_url=settings.embedding_base_url,
+                api_key=settings.embedding_api_key,
+                timeout=settings.embedding_timeout,
+                batch_size=settings.embedding_batch_size,
+                dim=settings.embedding_dim,
+            )
+        case unreachable:
+            assert_never(unreachable)

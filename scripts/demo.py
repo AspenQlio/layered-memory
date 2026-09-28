@@ -13,9 +13,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from layered_memory.agents.handoff import HandoffQueue
+from layered_memory.memory.record import MemoryRecord
 from layered_memory.memory.service import MemoryService
 from layered_memory.retrieval.embeddings import HashingEmbedder
 from layered_memory.retrieval.index import VectorIndex, build_context_block
@@ -136,8 +139,10 @@ def main() -> int:
     return 0
 
 
-def reversed_lineage(service: MemoryService, session: object, memory_id: str) -> list:
-    chain = []
+def reversed_lineage(
+    service: MemoryService, session: Session, memory_id: str
+) -> list[MemoryRecord]:
+    chain: list[MemoryRecord] = []
     current = service.get(session, memory_id)
     while current.parent_id is not None:
         chain.append(current)

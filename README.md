@@ -47,7 +47,9 @@ quality.
 
 The same 27 cases were run against BGE-M3 through Ollama. Overall hit@1 rose
 from 0.56 to 0.89, and paraphrase hit@1 rose from 0.22 to 0.78. The complete
-report records the model digest and the remaining miss.
+report records the model digest. A hybrid backend keeps the semantic top five
+and applies weighted RRF to the remaining results. It keeps hit@1 at 0.89 and
+raises hit@10 from 0.96 to 1.00.
 
 See [`docs/evaluation.md`](docs/evaluation.md) for the complete metrics,
 limitations, and semantic-embedder instructions.
@@ -183,6 +185,16 @@ export LAYERED_MEMORY_EMBEDDING_BASE_URL=http://localhost:11434/v1
 layered-memory reindex
 ```
 
+Set the backend to `hybrid` to keep the semantic top five and rerank the tail
+with lexical hashing. The lexical signal includes titles, content, and tags.
+
+```bash
+export LAYERED_MEMORY_EMBEDDING_BACKEND=hybrid
+export LAYERED_MEMORY_HYBRID_SEMANTIC_HEAD=5
+export LAYERED_MEMORY_HYBRID_SEMANTIC_WEIGHT=3
+layered-memory reindex
+```
+
 See [`docs/architecture.md`](docs/architecture.md) for the dependency and data
 flow details.
 
@@ -190,7 +202,7 @@ flow details.
 
 ```bash
 ruff check .
-pytest --cov=layered_memory --cov-report=term-missing  # 63 tests
+pytest --cov=layered_memory --cov-report=term-missing  # 74 tests
 ```
 
 The suite covers promotion lineage, retrieval filters and ranking, competing
