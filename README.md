@@ -8,7 +8,7 @@ difference between what happened and what it learned. `layered-memory` makes
 that distinction explicit, preserves lineage between layers, and provides a
 reproducible retrieval benchmark.
 
-> 🇪🇸 [Versión en español](README.es.md)
+> [Versión en español](README.es.md)
 
 ## The model
 

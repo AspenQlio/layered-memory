@@ -7,7 +7,7 @@ Un agente que acumula todo en un solo plano se ahoga en su propio historial y no
 distingue lo que vivió de lo que concluyó. Este proyecto separa esos momentos
 en tres capas explícitas, mide si el retrieval funciona y expone todo por HTTP.
 
-> 🇬🇧 [English version](README.md)
+> [English version](README.md)
 
 ---
 

@@ -99,11 +99,11 @@ de devolver ruido.
 
 Todas en `eval/metrics.py`, con relevancia binaria y posicion 1 como la mejor:
 
-- `hit@k` — al menos un relevante en el top-k
-- `recall@k` — fraccion de relevantes en el top-k
-- `precision@k` — fraccion de relevantes dentro del top-k, penaliza el relleno
-- `mrr` — 1/rank del primer relevante
-- `ndcg@k` — ganancia normalizada con descuento logaritmico
+- `hit@k`: al menos un relevante en el top-k
+- `recall@k`: fraccion de relevantes en el top-k
+- `precision@k`: fraccion de relevantes dentro del top-k, penaliza el relleno
+- `mrr`: 1/rank del primer relevante
+- `ndcg@k`: ganancia normalizada con descuento logaritmico
 
 `EvalReport.aggregate_by_group()` es la razon de que el modulo exista: un promedio
 unico sobre consultas de dos naturalezas distintas es un numero que no lleva a
