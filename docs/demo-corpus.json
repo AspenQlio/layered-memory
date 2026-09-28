@@ -1,0 +1,200 @@
+{
+  "namespace": "comercio",
+  "documents": [
+    {
+      "key": "cert-pagos",
+      "layer": "raw",
+      "title": "Incidente 2026-03-14: gateway de pagos devolvio 502",
+      "content": "Durante 22 minutos el gateway de pagos respondio 502 a todos los carritos. El certificado TLS del dominio de checkout habia expirado y el balanceador no lo renovaba automaticamente. Se pierden 41 pedidos por 1.940 dolares.",
+      "tags": ["incidente", "pagos", "tls"]
+    },
+    {
+      "key": "cert-pagos-insight",
+      "layer": "insight",
+      "parent": "cert-pagos",
+      "title": "La renovacion de certificados no estaba automatizada ni monitoreada",
+      "content": "El equipo confiaba en un recordatorio manual trimestral. La ausencia de alertas de vencimiento hacia que el fallo apareciera primero en produccion y no en el monitoreo. La leccion es que toda dependencia con fecha de expiracion debe tener alerta automatica con 30 dias de anticipacion.",
+      "tags": ["incidente", "certificados", "postmortem"]
+    },
+    {
+      "key": "cert-pagos-artifact",
+      "layer": "artifact",
+      "parent": "cert-pagos-insight",
+      "title": "Runbook: gestion de certificados TLS",
+      "content": "1. Alerta automatica 30 dias antes del vencimiento, enviada al canal de guardia.\n2. Renovacion con script idempotente y validacion de la cadena completa.\n3. Prueba semanal de expiracion contra un dominio espejo.\n4. Postmortem en 48 horas si la alerta se dispara en produccion.",
+      "tags": ["runbook", "tls", "operaciones"]
+    },
+    {
+      "key": "webhook-reintentos",
+      "layer": "raw",
+      "title": "Los webhooks de despacho perdian eventos",
+      "content": "El endpoint de webhooks del transportador respondia 500 ante rafagas y no reintentaba con backoff. Entre el 2 y el 9 de marzo se perdieron 1.204 notificaciones de despacho. Los clientes se quejaron por actualizaciones que nunca llegaron.",
+      "tags": ["incidente", "webhooks", "logistica"]
+    },
+    {
+      "key": "webhook-insight",
+      "layer": "insight",
+      "parent": "webhook-reintentos",
+      "title": "Sin cola intermedia, cualquier micro-caida se convierte en perdida de datos",
+      "content": "El procesamiento era sincrono: el transportador llamaba y nosotros respondiamos. Sin cola y sin idempotencia, un reintento del transportador podia duplicar la notificacion y un 500 la eliminaba. La solucion es aceptar, devolver 202 y procesar de forma asincrona.",
+      "tags": ["arquitectura", "webhooks", "confiabilidad"]
+    },
+    {
+      "key": "onboarding-rrhh",
+      "layer": "raw",
+      "title": "Alta de vendedor: seis dias entre solicitud y acceso",
+      "content": "El proceso de alta de un vendedor comercial requiere cuatro firmas en documentos PDF y la creacion manual de permisos en tres sistemas. Tiempo promedio medido: 6,2 dias. La empresa pierde a 2 de cada 10 candidatos antes de que empiece a vender.",
+      "tags": ["rrhh", "proceso", "ventas"]
+    },
+    {
+      "key": "onboarding-insight",
+      "layer": "insight",
+      "parent": "onboarding-rrhh",
+      "title": "El cuello de botella son las firmas, no el trabajo",
+      "content": "Ningun paso tecnico toma mas de veinte minutos. El tiempo se va en esperar firmas. Digitalizar la firma y automatizar la creacion de permisos deja el proceso en menos de un dia, sin cambiar la politica de aprobaciones.",
+      "tags": ["rrhh", "proceso", "automatizacion"]
+    },
+    {
+      "key": "datos-clientes",
+      "layer": "raw",
+      "title": "Calidad de datos de clientes: 12 por ciento de direcciones inutilizables",
+      "content": "En la tabla de clientes, 12,4 por ciento de las direcciones estan vacias, duplicadas o en formato no parseable. El envio a courier falla para 3 de cada 100 pedidos por esto. No hay ninguna validacion en el momento del registro.",
+      "tags": ["datos", "calidad", "logistica"]
+    },
+    {
+      "key": "datos-insight",
+      "layer": "insight",
+      "parent": "datos-clientes",
+      "title": "La direccion no se valida porque la API de geocodificacion se llamo tarde",
+      "content": "El registro guarda la direccion cruda y la normalizacion ocurre en un job nocturno. Si la normalizacion falla, nadie se entera. Validar en el ingreso convierte un problema de calidad de datos en un mensaje de error al cliente.",
+      "tags": ["datos", "validacion", "geocodificacion"]
+    },
+    {
+      "key": "stock-sync",
+      "layer": "raw",
+      "title": "Desincronizacion de inventario con la bodega central",
+      "content": "El ERP de la bodega central actualiza el stock cada 15 minutos por archivo CSV. Durante una promocion el archivo llego con 9 horas de atraso y se vendieron 214 unidades que ya no existian, generando 31 cancelaciones y 8 reembolsos.",
+      "tags": ["inventario", "integracion", "erp"]
+    },
+    {
+      "key": "stock-insight",
+      "layer": "insight",
+      "parent": "stock-sync",
+      "title": "El archivo plano como fuente de verdad genera Huecos de inventario",
+      "content": "Con una latencia de horas, cualquier evento de venta puede quedar invalido. El inventario debe moverse a reserva en el momento de la venta y liberarse al confirmarse el pago, en vez de depender de una foto periódica del stock.",
+      "tags": ["inventario", "arquitectura", "consistencia"]
+    },
+    {
+      "key": "tcpdf-sustitucion",
+      "layer": "raw",
+      "title": "Libreria PDF con licencia incompatible con redistribucion",
+      "content": "La libreria usada para generar facturas y etiquetas tiene licencia que prohibe embeberla en un producto empaquetado. El area legal pidio reemplazarla antes de la salida a preventas de octubre.",
+      "tags": ["legal", "licencias", "dependencias"]
+    },
+    {
+      "key": "tcpdf-insight",
+      "layer": "insight",
+      "parent": "tcpdf-sustitucion",
+      "title": "El riesgo legal se mitiga con una dependencia de licencia MIT",
+      "content": "La alternativa evaluada genera el mismo PDF con licencia MIT y sin dependencias nativas. El costo es reescribir los plantillas de factura y etiqueta, unas 400 lineas, y cambiar el motor de fuentes.",
+      "tags": ["legal", "licencias", "migracion"]
+    },
+    {
+      "key": "login-mfa",
+      "layer": "raw",
+      "title": "Autenticacion de dos factores solo disponible en la aplicacion movil",
+      "content": "El equipo de soporte accede al panel sin segundo factor porque el flujo de TOTP no funciona en el navegador de escritorio. Un ex employee's sigue activo en la cuenta desde su salida en enero.",
+      "tags": ["seguridad", "acceso", "auditoria"]
+    },
+    {
+      "key": "login-insight",
+      "layer": "insight",
+      "parent": "login-mfa",
+      "title": "La brecha estaba en el canal de recuperacion, no en el de autenticacion",
+      "content": "TOTP funcionaba bien; lo que faltaba era el paso de enrolamiento desde escritorio. Cerrar cuentas inactivas cada 90 dias y permitir enrolamiento web elimina la excepcion que justificaba el acceso sin segundo factor.",
+      "tags": ["seguridad", "acceso", "auditoria"]
+    },
+    {
+      "key": "busqueda-catalogo",
+      "layer": "raw",
+      "title": "La busqueda del catalogo no encuentra productos por descripcion corta",
+      "content": "El indice de texto completo solo considera el nombre del producto. Las descripciones de una linea que escriben los vendedores no se indexan, y el 61 por ciento de las busquedas sin resultado usan palabras de la descripcion.",
+      "tags": ["catalogo", "busqueda", "experiencia"]
+    },
+    {
+      "key": "busqueda-insight",
+      "layer": "insight",
+      "parent": "busqueda-catalogo",
+      "title": "Indexar la descripcion y aplicarEmbeddings mejora la coincidencia semantica",
+      "content": "Embeddings sobre nombre mas descripcion permite que 'ropa para criar' encuentre 'enterizo de algodón para lactantes'. El indice vectorial evita depender de sinonimos y listas de palabras clave que el equipo comercial mantenia a mano.",
+      "tags": ["catalogo", "busqueda", "embeddings"]
+    },
+    {
+      "key": "checkout-3ds",
+      "layer": "raw",
+      "title": "Reglas de 3D Secure rechazan tarjetas en países de alto fraude",
+      "content": "El motor de riesgo marca cualquier transaccion desde una IP marcada como sospechosa y exige stepped-up authentication. El resultado es una tasa de rechazo 3,2 veces mayor en esos mercados, con perdida de 62.000 dolares mensuales.",
+      "tags": ["pagos", "fraude", "internacional"]
+    },
+    {
+      "key": "checkout-insight",
+      "layer": "insight",
+      "parent": "checkout-3ds",
+      "title": "El mismo corte se aplica a clientes habituales y a fraude nuevo",
+      "content": "La regla no considera historial ni monto, asi que castiga al cliente recurrente. Un puntaje que sume antiguedad del metodo de pago y monto historico reduce el falso positivo sin bajar la deteccion real.",
+      "tags": ["pagos", "fraude", "motor-de-riesgo"]
+    },
+    {
+      "key": "email-bounced",
+      "layer": "raw",
+      "title": "Los correos de confirmacion no llegan a dominios de correo corporativo",
+      "content": "El proveedor de envio no tiene warm-up en esa carpeta. Para clientes con dominio propio la confirmacion cae en spam y el carrito se abandona en un 8 por ciento de los casos. Afecta sobre todo a empresas, no a consumidores.",
+      "tags": ["email", "entrega", "marketing"]
+    },
+    {
+      "key": "email-insight",
+      "layer": "insight",
+      "parent": "email-bounced",
+      "title": "La confirmacion no debe depender de correo: el estado vive en la sesion",
+      "content": "Mostrar la confirmacion dentro de la propia aplicacion y enviar el correo como respaldo elimina la dependencia. El enlace por correo pasa a ser una via secundaria para recuperar la sesion.",
+      "tags": ["email", "producto", "confiabilidad"]
+    },
+    {
+      "key": "runbook-oncall",
+      "layer": "raw",
+      "title": "El equipo de guardia descubre los problemas por los clientes",
+      "content": "No hay alertas proactivas. El ticket llega primero que la notificacion interna, y el tiempo medio de deteccion es de 47 minutos. La guardia rota tiene tres personas y ninguna alerta configurada.",
+      "tags": ["operaciones", "guardia", "monitoreo"]
+    },
+    {
+      "key": "runbook-artifact",
+      "layer": "artifact",
+      "parent": "runbook-oncall",
+      "title": "Politica de alertas de guardia: que despierta a una persona",
+      "content": "1. Alerta roja si la tasa de error supera 2 por ciento durante 5 minutos.\n2. Alerta amarilla si la latencia p99 supera el doble de la mediana semanal.\n3. Todo lo demas se revisa en horario hábil.\n4. Cada alerta debe apuntar a un runbook vigente.",
+      "tags": ["runbook", "operaciones", "monitoreo"]
+    },
+    {
+      "key": "coste-nube",
+      "layer": "raw",
+      "title": "La factura de infraestructura subio 38 por ciento en tres meses",
+      "content": "El gasto mensual paso de 41.000 a 57.000 dolares. Los dos grandes conceptos son el almacenamiento de imagenes de producto sin politica de limpieza y un cluster de base de datos sobredimensionado para el volumen actual.",
+      "tags": ["infraestructura", "costes", "nube"]
+    },
+    {
+      "key": "coste-insight",
+      "layer": "insight",
+      "parent": "coste-nube",
+      "title": "Los dos gastos tienen dueño y corrección trivial",
+      "content": "Las imagenes de producto nunca se borran al discontinuar y el cluster tiene memoria reservada para un pico que no ocurre. Archivar con lifecycle de 90 dias y reducir el tamano de instancia recupera cerca del 30 por ciento del gasto.",
+      "tags": ["infraestructura", "costes", "optimizacion"]
+    },
+    {
+      "key": "accesibilidad",
+      "layer": "raw",
+      "title": "El checkout no es navegable con teclado",
+      "content": "Tres campos de tarjeta y el boton de pago no son alcanzables con tabulacion, y el formulario no anuncia errores a lectores de pantalla. Una auditoria con teclado y NVDA detecto nueve bloqueos en el flujo de compra.",
+      "tags": ["accesibilidad", "producto", "checkout"]
+    }
+  ]
+}

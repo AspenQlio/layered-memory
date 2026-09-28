@@ -1,0 +1,170 @@
+{
+  "description": "Casos de evaluacion del corpus de demostracion. Los grupos separan lo que el indice puede y no puede resolver, para que un promedio unico no esconda la diferencia.",
+  "cases": [
+    {
+      "id": "q-lex-01",
+      "group": "lexical",
+      "query": "certificado TLS expirado en el gateway de pagos",
+      "expected": ["cert-pagos"],
+      "note": "Comparte vocabulario con el titulo y el contenido."
+    },
+    {
+      "id": "q-lex-02",
+      "group": "lexical",
+      "query": "los webhooks del transportador devolvieron 500",
+      "expected": ["webhook-reintentos"]
+    },
+    {
+      "id": "q-lex-03",
+      "group": "lexical",
+      "query": "el alta de un vendedor toma seis dias",
+      "expected": ["onboarding-rrhh"]
+    },
+    {
+      "id": "q-lex-04",
+      "group": "lexical",
+      "query": "direcciones vacias y duplicadas en la tabla de clientes",
+      "expected": ["datos-clientes"]
+    },
+    {
+      "id": "q-lex-05",
+      "group": "lexical",
+      "query": "archivo CSV de stock que llega cada 15 minutos",
+      "expected": ["stock-sync"]
+    },
+    {
+      "id": "q-lex-06",
+      "group": "lexical",
+      "query": "libreria PDF cuya licencia prohibe la redistribucion",
+      "expected": ["tcpdf-sustitucion"]
+    },
+    {
+      "id": "q-lex-07",
+      "group": "lexical",
+      "query": "el panel de soporte no exige segundo factor",
+      "expected": ["login-mfa"]
+    },
+    {
+      "id": "q-lex-08",
+      "group": "lexical",
+      "query": "la busqueda del catalogo no indexa la descripcion",
+      "expected": ["busqueda-catalogo"]
+    },
+    {
+      "id": "q-lex-09",
+      "group": "lexical",
+      "query": "reglas de 3D Secure rechazan tarjetas en paises de alto fraude",
+      "expected": ["checkout-3ds"]
+    },
+    {
+      "id": "q-lex-10",
+      "group": "lexical",
+      "query": "correos de confirmacion que caen en la carpeta de spam",
+      "expected": ["email-bounced"]
+    },
+    {
+      "id": "q-lex-11",
+      "group": "lexical",
+      "query": "la guardia se entera de los problemas por los tickets",
+      "expected": ["runbook-oncall"]
+    },
+    {
+      "id": "q-lex-12",
+      "group": "lexical",
+      "query": "la factura de infraestructura subio un 38 por ciento",
+      "expected": ["coste-nube"]
+    },
+    {
+      "id": "q-par-01",
+      "group": "paraphrase",
+      "query": "que paso con las compras que no se pudieron cobrar",
+      "expected": ["cert-pagos"],
+      "note": "Misma situacion, ninguna palabra en comun."
+    },
+    {
+      "id": "q-par-02",
+      "group": "paraphrase",
+      "query": "los clientes nunca reciben los avisos de entrega",
+      "expected": ["webhook-reintentos"]
+    },
+    {
+      "id": "q-par-03",
+      "group": "paraphrase",
+      "query": "cuanto demora una persona nueva en poder empezar a trabajar",
+      "expected": ["onboarding-rrhh"]
+    },
+    {
+      "id": "q-par-04",
+      "group": "paraphrase",
+      "query": "por que el transportador no sabe donde entregar el paquete",
+      "expected": ["datos-clientes"]
+    },
+    {
+      "id": "q-par-05",
+      "group": "paraphrase",
+      "query": "se vendieron articulos que ya no quedaban en bodega",
+      "expected": ["stock-sync"]
+    },
+    {
+      "id": "q-par-06",
+      "group": "paraphrase",
+      "query": "hay una cuenta de alguien que se fue y sigue entrando al sistema",
+      "expected": ["login-mfa"]
+    },
+    {
+      "id": "q-par-07",
+      "group": "paraphrase",
+      "query": "la gente no encuentra los productos en la tienda web",
+      "expected": ["busqueda-catalogo"]
+    },
+    {
+      "id": "q-par-08",
+      "group": "paraphrase",
+      "query": "las tarjetas de compradores de otros paises se rechazan al pagar",
+      "expected": ["checkout-3ds"]
+    },
+    {
+      "id": "q-par-09",
+      "group": "paraphrase",
+      "query": "hay cuentas de cloud que cuestan dinero y no se usan",
+      "expected": ["coste-nube"]
+    },
+    {
+      "id": "q-pro-01",
+      "group": "promotion",
+      "query": "que habria que cambiar para que el incidente de certificados no se repita",
+      "expected": ["cert-pagos-insight", "cert-pagos"],
+      "note": "La respuesta es el destilado, no la captura literal."
+    },
+    {
+      "id": "q-pro-02",
+      "group": "promotion",
+      "query": "pasos a seguir para renovar el certificado",
+      "expected": ["cert-pagos-artifact"]
+    },
+    {
+      "id": "q-pro-03",
+      "group": "promotion",
+      "query": "cual es la causa de fondo por la que se perdieron los webhooks",
+      "expected": ["webhook-insight"]
+    },
+    {
+      "id": "q-pro-04",
+      "group": "promotion",
+      "query": "con que criterio se decide a quien despertar en la noche",
+      "expected": ["runbook-artifact"]
+    },
+    {
+      "id": "q-pro-05",
+      "group": "promotion",
+      "query": "plan para reemplazar la libreria de documentos PDF",
+      "expected": ["tcpdf-insight"]
+    },
+    {
+      "id": "q-pro-06",
+      "group": "promotion",
+      "query": "por que se perdieron las notificaciones de despacho y como evitarlo",
+      "expected": ["webhook-insight", "webhook-reintentos"]
+    }
+  ]
+}
